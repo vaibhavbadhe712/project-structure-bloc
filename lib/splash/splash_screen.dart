@@ -3,7 +3,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:startup_project/bloc/login/login_bloc.dart';
 import 'package:startup_project/bloc/login/login_event.dart';
 import 'package:startup_project/bloc/login/login_state.dart';
-import 'package:startup_project/repo/login_repo.dart'; 
+import 'package:startup_project/presentations/get_data/get_data_screen.dart';
+import 'package:startup_project/repo/login_repo.dart';
 
 class LoginPage extends StatelessWidget {
   final TextEditingController _phoneNumberController = TextEditingController();
@@ -22,6 +23,8 @@ class LoginPage extends StatelessWidget {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(content: Text('OTP sent successfully')),
                 );
+                Navigator.push(context,
+                    MaterialPageRoute(builder: (context) => GetDataScreen()));
               } else if (state is SendOtpFailure) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(content: Text('Error: ${state.errorMessage}')),
@@ -47,8 +50,7 @@ class LoginPage extends StatelessWidget {
                     SizedBox(height: 16),
                     ElevatedButton(
                       onPressed: () {
-                        final phoneNumber =
-                            _phoneNumberController.text.trim();
+                        final phoneNumber = _phoneNumberController.text.trim();
                         if (phoneNumber.isNotEmpty) {
                           context
                               .read<LoginBloc>()
@@ -64,7 +66,8 @@ class LoginPage extends StatelessWidget {
                     ),
                   ],
                 );
-              } return Container();
+              }
+              return Container();
             },
           ),
         ),

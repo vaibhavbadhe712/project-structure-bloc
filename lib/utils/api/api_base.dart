@@ -15,7 +15,7 @@ typedef ApiResponseFailure = Function(String error);
 const String jsonContentType = 'application/json';
 
 class ApiBase {
-  final Dio _client =Dio();
+  final Dio _client = Dio();
   final Map<String, String> _headers;
   Future _getToken() async {
     token = await LocalStorageUtils.fetchToken();
@@ -27,44 +27,64 @@ class ApiBase {
 
   ApiBase({Map<String, String>? headers})
       : _headers = headers ?? {'Content-Type': jsonContentType};
+
   Future<void> get(
     String url,
-    ApiResponseSuccess onSuccess,
-    ApiResponseFailure onFailure, {
+    Function(dynamic) onSuccess,
+    Function(dynamic) onError, {
     bool? isTokenMandatory = false,
   }) async {
-    await _getToken();
+    try {
+      // Add the token to headers if required
+      if (isTokenMandatory ?? false) {
+        await _getToken(); // Ensure you fetch the token first
+        _headers['Authorization'] = token ?? '';
+      }
 
-    if (isTokenMandatory ?? false) {
-      _headers['Authorization'] = token ?? '';
+      // Log the URL being requested
+      log("\x1B[32m${"URL -> $url"}\x1B[0m");
+
+      // Make the GET request
+      final response = await http.get(
+        Uri.parse(url),
+        headers: _headers,
+      );
+
+      // Check for successful response
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        onSuccess(data);
+      } else {
+        onError(response.body);
+      }
+    } catch (error) {
+      onError(error.toString());
     }
-    log("\x1B[32m${"URL -> $url"}\x1B[0m");
-    _request(
-        (uri) => http.get(uri, headers: _headers), url, onSuccess, onFailure);
   }
 
-Future<void> post(
-  String endpoint,
-  Map<String, dynamic> payload,
-  Function(dynamic) onSuccess,
-  Function(dynamic) onError,
-) async {
-  try {
-    final response = await http.post(
-      Uri.parse(endpoint),
-      body: jsonEncode(payload),
-      headers: {'Content-Type': 'application/json'},
-    );
-    if (response.statusCode == 200) {
-      final data = jsonDecode(response.body);
-      onSuccess(data);
-    } else {
-      onError(response.body);
+  Future<void> post(
+    String endpoint,
+    Map<String, dynamic> payload,
+    Function(dynamic) onSuccess,
+    Function(dynamic) onError,
+  ) async {
+    try {
+      final response = await http.post(
+        Uri.parse(endpoint),
+        body: jsonEncode(payload),
+        headers: {'Content-Type': 'application/json'},
+      );
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        onSuccess(data);
+      } else {
+        onError(response.body);
+      }
+    } catch (error) {
+      onError(error);
     }
-  } catch (error) {
-    onError(error);
   }
-}
+
   Future<void> put(
     String url,
     Map<String, dynamic> body,
@@ -81,22 +101,25 @@ Future<void> post(
         url, onSuccess, onFailure);
   }
 
- Future<void> delete(
-  String url,
-  Map<String, dynamic> body,
-  ApiResponseSuccess onSuccess,
-  ApiResponseFailure onFailure, {
-  bool? isTokenMandatory = false,
-}) async {
-  await _getToken();
-  if (isTokenMandatory ?? false) {
-    _headers['Authorization'] = token ?? '';
+  Future<void> delete(
+    String url,
+    Map<String, dynamic> body,
+    ApiResponseSuccess onSuccess,
+    ApiResponseFailure onFailure, {
+    bool? isTokenMandatory = false,
+  }) async {
+    await _getToken();
+    if (isTokenMandatory ?? false) {
+      _headers['Authorization'] = token ?? '';
+    }
+    log('\x1B[32m${"URL -> $url"}\x1B[0m');
+    _request(
+        (uri) => http.delete(uri, body: jsonEncode(body), headers: _headers),
+        url,
+        onSuccess,
+        onFailure);
   }
-  log('\x1B[32m${"URL -> $url"}\x1B[0m');
-  _request((uri) => http.delete(uri, body: jsonEncode(body), headers: _headers),
-      url, onSuccess, onFailure);
-}
- 
+
   Future dioPutFile(
       {required String? url,
       XFile? uploadFile,
@@ -110,7 +133,7 @@ Future<void> post(
           'Content-Length': fileLength,
           'Connection': 'keep-alive',
         });
- 
+
     final response = await _client.put(url ?? "",
         data: data ?? uploadFile?.openRead(),
         options: options, onSendProgress: (val1, val2) {
@@ -121,46 +144,45 @@ Future<void> post(
       log("file upload successfully");
     }
   }
- 
- 
 
-Future<void> _request(Function requestMethod, String url,
-    ApiResponseSuccess onSuccess, ApiResponseFailure onFailure) async {
-  try {
-    final response = await requestMethod(Uri.parse(url));
-    log('\x1B[32m${"URL -> ${response.request?.url}"}\x1B[0m');
-    log("URL -> ${response.request?.url}");
-    if (response.statusCode >= 200 && response.statusCode < 300) {
-      onSuccess(jsonDecode(response.body));
-    } else {
-      final errorResponse = jsonDecode(response.body);
-      final errorMessage = errorResponse['message'] ?? 'Failed to load data.';
+  Future<void> _request(Function requestMethod, String url,
+      ApiResponseSuccess onSuccess, ApiResponseFailure onFailure) async {
+    try {
+      final response = await requestMethod(Uri.parse(url));
+      log('\x1B[32m${"URL -> ${response.request?.url}"}\x1B[0m');
+      log("URL -> ${response.request?.url}");
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        onSuccess(jsonDecode(response.body));
+      } else {
+        final errorResponse = jsonDecode(response.body);
+        final errorMessage = errorResponse['message'] ?? 'Failed to load data.';
 
-      switch (response.statusCode) {
-        case 400:
-          onFailure('Bad request: $errorMessage');
-          break;
-        case 401:
-          onFailure('Unauthorized: $errorMessage');
-          break;
-        case 403:
-          onFailure('Forbidden: $errorMessage');
-          break;
-        case 404:
-          onFailure('Not found: $errorMessage');
-          break;
-        case 500:
-          onFailure('Internal server error: $errorMessage');
-          break;
-        default:
-          onFailure('Failed to load data. Status code: ${response.statusCode}');
-          break;
+        switch (response.statusCode) {
+          case 400:
+            onFailure('Bad request: $errorMessage');
+            break;
+          case 401:
+            onFailure('Unauthorized: $errorMessage');
+            break;
+          case 403:
+            onFailure('Forbidden: $errorMessage');
+            break;
+          case 404:
+            onFailure('Not found: $errorMessage');
+            break;
+          case 500:
+            onFailure('Internal server error: $errorMessage');
+            break;
+          default:
+            onFailure(
+                'Failed to load data. Status code: ${response.statusCode}');
+            break;
+        }
       }
+    } catch (e) {
+      onFailure('An error occurred: $e');
     }
-  } catch (e) {
-    onFailure('An error occurred: $e');
   }
-}
 
   void addHeader(String key, String value) {
     _headers[key] = value;
